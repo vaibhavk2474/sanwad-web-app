@@ -1,17 +1,73 @@
 import { User } from "../models/user.model.js";
 import { validatePassword } from "../utils/validatePassword.js";
+import deleteFile from "../utils/deleteFile.js";
+import { PASSWORD_REGEX } from "../constants/index.js";
 
+const deletedFiles = (fileObj = {}) => {
+	console.log(fileObj, "a");
+
+	Object.keys(fileObj).forEach((cKey) => {
+		fileObj[cKey]?.forEach((cObj) => {
+			deleteFile(cObj?.path);
+		});
+	});
+};
+
+const validate = (values = {}) => {
+	let errors = {};
+
+	if (!values.fullName) {
+		errors["fullName"] = "Full Name is required";
+	}
+	if (!values.userName) {
+		errors["userName"] = "User Name is required";
+	}
+	if (!values.email) {
+		errors["email"] = "Email is required";
+	} else if (
+		!values.email?.match(/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/)
+	) {
+		errors["email"] = "Email is invalid string";
+	}
+
+	if (!values.password) {
+		errors["password"] = "Password is required";
+	} else if (!values.password?.match(PASSWORD_REGEX)) {
+		errors["password"] = "Password is invalid";
+	}
+	if (!values.phoneNumber) {
+		errors["phoneNumber"] = "PhoneNumber is required";
+	}
+	if (!values.avatar) {
+		errors["avatar"] = "Avatar is required";
+	}
+
+	return errors;
+};
+const mongooseValidate = (errorObj = {}) => {
+	if (errorObj.name === "ValidationError") {
+		const errors = errorObj?.errors;
+		const customiseErrors = Object.keys(errors || {}).reduce(
+			(prevErrorState, cFieldKey) => {
+				return {
+					...prevErrorState,
+					[cFieldKey]: errors?.[cFieldKey]?.message,
+				};
+			},
+			{}
+		);
+		return { ...customiseErrors, errors: errorObj };
+	} else {
+		return errors;
+	}
+};
 const registerUser = async (req, res) => {
 	try {
-		const {
-			fullName,
-			userName,
-			email,
-			password,
-			phoneNumber,
-			avatar,
-			coverImage,
-		} = req.body;
+		// console.log("req.body", req.body, req.file, req.files);
+
+		const avatar = req?.files?.["avatar"]?.[0]?.path;
+		const coverImage = req?.files?.["coverImage"]?.[0]?.path;
+		const { fullName, userName, email, password, phoneNumber } = req.body;
 
 		// get user details
 		// validate all details
@@ -24,46 +80,50 @@ const registerUser = async (req, res) => {
 			email,
 			password,
 			phoneNumber,
-			// avatar,
-			// coverImage,
+			avatar,
+			coverImage,
 		};
 
+		console.log("newUser", newUser);
+
 		// check validations error
-		const validationErrors = Object.keys(newUser).reduce(
-			(prevState, currentField) => {
-				if (currentField === "password") {
-					if (!newUser[currentField]) {
-						return {
-							...prevState,
-							[currentField]: `${currentField} is required.`,
-						};
-					}
+		// const validationErrors = Object.keys(newUser).reduce(
+		// 	(prevState, currentField) => {
+		// 		if (currentField === "password") {
+		// 			if (!newUser[currentField]) {
+		// 				return {
+		// 					...prevState,
+		// 					[currentField]: `${currentField} is required.`,
+		// 				};
+		// 			}
 
-					const passwordError = validatePassword(
-						newUser[currentField]
-					);
-					console.log(passwordError);
+		// 			const passwordError = validatePassword(
+		// 				newUser[currentField]
+		// 			);
+		// 			console.log(passwordError);
 
-					if (passwordError) {
-						return {
-							...prevState,
-							[currentField]: `${passwordError}`,
-						};
-					} else {
-						return prevState;
-					}
-				} else if (!newUser[currentField]) {
-					return {
-						...prevState,
-						[currentField]: `${currentField} is required.`,
-					};
-				} else {
-					return prevState;
-				}
-			},
-			{}
-		);
+		// 			if (passwordError) {
+		// 				return {
+		// 					...prevState,
+		// 					[currentField]: `${passwordError}`,
+		// 				};
+		// 			} else {
+		// 				return prevState;
+		// 			}
+		// 		} else if (!newUser[currentField]) {
+		// 			return {
+		// 				...prevState,
+		// 				[currentField]: `${currentField} is required.`,
+		// 			};
+		// 		} else {
+		// 			return prevState;
+		// 		}
+		// 	},
+		// 	{}
+		// );
 
+		//
+		const validationErrors = validate(newUser);
 		if (Object.keys(validationErrors).length !== 0) {
 			return res.status(400).send({
 				message: "Validation errors",
@@ -87,6 +147,8 @@ const registerUser = async (req, res) => {
 
 		delete userObj["password"];
 
+		deletedFiles(req?.files);
+
 		res.status(200).json({
 			mesaage: "Signup successfully done",
 			user: userObj,
@@ -94,7 +156,8 @@ const registerUser = async (req, res) => {
 	} catch (error) {
 		return res.status(500).send({
 			message: error?.message || "Signup error occurs",
-			error: error,
+			// error: (error),
+			error: mongooseValidate(error),
 		});
 	}
 };
